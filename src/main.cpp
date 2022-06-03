@@ -6,6 +6,13 @@
 // https://github.com/espressif/arduino-esp32/blob/master/libraries/Wire/src/Wire.h
 #include <Wire.h>
 
+
+#include <esp_wifi.h>
+#include <esp_bt.h>
+#include <esp_bt_main.h>
+#include "driver/adc.h"
+
+
 // Set up the rgb led names
 #define ledR  16
 #define ledG  17
@@ -84,7 +91,7 @@ TwoWire I2C_micom = TwoWire(0);
 uint8_t r[2] = {0, 0};
 volatile byte mRCount = 0;
 
-bool writeToJungle(const uint8_t reg, const uint8_t val) {
+bool writeToJungle(const uint8_t reg, const uint8_t val, bool verbose) {
   I2C_jungl.beginTransmission((uint8_t) MITSU_I2C_ADDRESS);
   int b1 = I2C_jungl.write(reg);
   int b2 = I2C_jungl.write(val);
@@ -95,6 +102,10 @@ bool writeToJungle(const uint8_t reg, const uint8_t val) {
     sprintf(buff, "Failed writing register %#02x (%d) => %#02x (%d)\n", reg, reg, val, val);
     Serial.print(buff);
     return false;
+  } else if (verbose) {
+    char buff[50];
+    sprintf(buff, "Writing register %#02x (%d) => %#02x (%d)\n", reg, reg, val, val);
+    Serial.print(buff);
   }
   return true;
 }
@@ -168,9 +179,10 @@ void readFromMicom(int byteCount)
     uint8_t reg = I2C_micom.read();
     uint8_t val = I2C_micom.read();
     bool frobbled = false;
+    bool verbose = false;
     switch (reg)
     {
-      case REG_OSD_RGB_MODE:
+      case REG_OSD_RGB_MODE: // is continously set on interval by Orion TV!
         // ensure "Analog OSD" is left pulled-up (the 5th bit from right)
         bitSet(val, 4); // Analog OSD 1=>ON 0=>OFF
         // bitSet(val, 3); // Force Monochrome 1=>ON 0=>OFF
@@ -185,17 +197,19 @@ void readFromMicom(int byteCount)
       //case 0x2:
       //  delay(50);
         break;
-      case 0x06:
+      case 0x06: // is continously set on interval by Orion TV!
         bitClear(val, 4); // we want C-video, not just Y-video (luminance - monochrome!);
+        // bitSet(val, 2); // set EXT bit
+        //      seems to not be needed to show External RGB if fast-blanking pin is correctly powered
         break;
       default:
         // passthru
         break;
     }
-    if (!writeToJungle(reg, val)) {
+    if (!writeToJungle(reg, val, verbose)) {
       // lets do _one_ retry
       delay(50);
-      writeToJungle(reg, val);
+      writeToJungle(reg, val, verbose);
     }
     // could also put [reg, val] in a circular buffer that loop() flushes on interval,
     //   instead of proxying from the handler
@@ -219,6 +233,13 @@ void readFromJungle(int byteCount)
 // the setup routine runs once when you press reset:
 void setup()
 {
+  // reduce power draw
+  setCpuFrequencyMhz(80);
+  adc_power_off();
+  esp_wifi_stop();
+  esp_bt_controller_disable();
+  esp_bluedroid_disable();
+
   Serial.begin(115200);
   if (!I2C_micom.begin(MITSU_I2C_ADDRESS, SDA_2, SCL_2, I2C_FREQ)) {
     Serial.println("error connecting with micom");
@@ -227,16 +248,16 @@ void setup()
   I2C_micom.onRequest(writeToMicom); // master is reading from us
   Serial.println("\nMitsu NTSC MITM");
  
-  ledcAttachPin(ledR,  1); // assign RGB led pins to channels
-  ledcAttachPin(ledG,  2);
-  ledcAttachPin(ledB,  3);
+  //ledcAttachPin(ledR,  1); // assign RGB led pins to channels
+  //ledcAttachPin(ledG,  2);
+  //ledcAttachPin(ledB,  3);
   //ledcAttachPin(ledB2, 4);
   // Initialize channels
   // channels 0-15, resolution 1-16 bits, freq limits depend on resolution
   // ledcSetup(uint8_t channel, uint32_t freq, uint8_t resolution_bits);
-  ledcSetup(1, 12000, 8); // 12 kHz PWM, 8-bit resolution
-  ledcSetup(2, 12000, 8);
-  ledcSetup(3, 12000, 8);
+  //ledcSetup(1, 12000, 8); // 12 kHz PWM, 8-bit resolution
+  //ledcSetup(2, 12000, 8);
+  //ledcSetup(3, 12000, 8);
   //ledcSetup(4, 12000, 8);
 
   if (!I2C_jungl.begin(SDA_1, SCL_1, I2C_FREQ)) {
@@ -256,6 +277,7 @@ void setup()
 // void loop runs over and over again
 void loop()
 {
+  /*
   for (color = 0; color < 255; color++) { // Slew through the color spectrum
     hueToRGB(color, brightness);  // call function to convert hue to RGB
 
@@ -267,6 +289,7 @@ void loop()
     //ledcWrite(4, color); // makes other blue led dim on and off
     delay(10); // full cycle of rgb over 256 colors takes 26 seconds
   }
+  */
  /*
   noInterrupts();
   readFromJungle(2);
