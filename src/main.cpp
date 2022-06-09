@@ -6,13 +6,6 @@
 // https://github.com/espressif/arduino-esp32/blob/master/libraries/Wire/src/Wire.h
 #include <Wire.h>
 
-
-#include <esp_wifi.h>
-#include <esp_bt.h>
-#include <esp_bt_main.h>
-#include "driver/adc.h"
-
-
 // Set up the rgb led names
 #define ledR  16
 #define ledG  17
@@ -78,8 +71,8 @@ void hueToRGB(uint8_t hue, uint8_t brightness)
 #define MITSU_I2C_ADDRESS 93U // 0x5d
 #define REG_OSD_RGB_MODE 0x15u
 // https://www.ezsbc.com/product/esp32-breakout-and-development-board/
-#define SDA_1 21 // ezSBC 16(has built-in pullup) - master pin to jungle
-#define SCL_1 22 // ezSBC 15
+#define SDA_1 22 // ezSBC 15(has built-in pullup) - master pin to jungle
+#define SCL_1 21 // ezSBC 16
 #define SDA_2 25  // ezSBC 10 slave pin to micom
 #define SCL_2 26  // ezSBC 11
 // GPIO 34, 35, 36 and 39 are INPUT ONY ports and can not be assigned as SCL or SDA
@@ -200,7 +193,14 @@ void readFromMicom(int byteCount)
       case 0x06: // is continously set on interval by Orion TV!
         bitClear(val, 4); // we want C-video, not just Y-video (luminance - monochrome!);
         // bitSet(val, 2); // set EXT bit
-        //      seems to not be needed to show External RGB if fast-blanking pin is correctly powered
+        /*
+            seems to make chip ignore Video AND Sync on the Y-in pin,
+            guessing that EXT/C pin becomes the active input...
+            TODO:
+              * install a sync-stripper off comp-vid input and route it to EXT/C
+              * tie a GPIO into my blanking-switch (RGB OFF/ON)
+              * if switch-pin is HIGH, then set this bit to use the stripped-sync as input
+        */
         break;
       default:
         // passthru
@@ -233,36 +233,31 @@ void readFromJungle(int byteCount)
 // the setup routine runs once when you press reset:
 void setup()
 {
-  // reduce power draw
-  setCpuFrequencyMhz(80);
-  adc_power_off();
-  esp_wifi_stop();
-  esp_bt_controller_disable();
-  esp_bluedroid_disable();
-
   Serial.begin(115200);
-  if (!I2C_micom.begin(MITSU_I2C_ADDRESS, SDA_2, SCL_2, I2C_FREQ)) {
-    Serial.println("error connecting with micom");
-  }
-  I2C_micom.onReceive(readFromMicom); // master is writing to us
-  I2C_micom.onRequest(writeToMicom); // master is reading from us
-  Serial.println("\nMitsu NTSC MITM");
- 
-  //ledcAttachPin(ledR,  1); // assign RGB led pins to channels
-  //ledcAttachPin(ledG,  2);
-  //ledcAttachPin(ledB,  3);
-  //ledcAttachPin(ledB2, 4);
-  // Initialize channels
-  // channels 0-15, resolution 1-16 bits, freq limits depend on resolution
-  // ledcSetup(uint8_t channel, uint32_t freq, uint8_t resolution_bits);
-  //ledcSetup(1, 12000, 8); // 12 kHz PWM, 8-bit resolution
-  //ledcSetup(2, 12000, 8);
-  //ledcSetup(3, 12000, 8);
-  //ledcSetup(4, 12000, 8);
-
   if (!I2C_jungl.begin(SDA_1, SCL_1, I2C_FREQ)) {
     Serial.print("error connecting with jungle");
   }
+  I2C_micom.onReceive(readFromMicom); // master is writing to us
+  I2C_micom.onRequest(writeToMicom); // master is reading from us
+  if (!I2C_micom.begin(MITSU_I2C_ADDRESS, SDA_2, SCL_2, I2C_FREQ)) {
+    Serial.println("error connecting with micom");
+  }
+  Serial.println("\nMitsu NTSC MITM");
+ 
+ /*
+  ledcAttachPin(ledR,  1); // assign RGB led pins to channels
+  ledcAttachPin(ledG,  2);
+  ledcAttachPin(ledB,  3);
+  ledcAttachPin(ledB2, 4);
+  // Initialize channels
+  // channels 0-15, resolution 1-16 bits, freq limits depend on resolution
+  // ledcSetup(uint8_t channel, uint32_t freq, uint8_t resolution_bits);
+  ledcSetup(1, 12000, 8); // 12 kHz PWM, 8-bit resolution
+  ledcSetup(2, 12000, 8);
+  ledcSetup(3, 12000, 8);
+  ledcSetup(4, 12000, 8);
+*/
+
   /*
   I2C_jungl.beginTransmission((uint8_t) MITSU_I2C_ADDRESS);
   if (0 == I2C_jungl.endTransmission()) {
