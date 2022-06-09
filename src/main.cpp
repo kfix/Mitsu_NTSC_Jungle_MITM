@@ -5,6 +5,8 @@
 #define REG_OSD_RGB_MODE 0x15u
 // https://www.ezsbc.com/product/esp32-breakout-and-development-board/
 #define SDA_1 22 // ezSBC 15(has built-in pullup) - master pin to jungle
+// I had trouble using an external 3.3V PSU for the ESP && external pullups --
+//   the built-in ones seem to be good-enough....
 #define SCL_1 21 // ezSBC 16
 #define SDA_2 25  // ezSBC 10 slave pin to micom
 #define SCL_2 26  // ezSBC 11
@@ -36,24 +38,15 @@ bool writeToJungle(const uint8_t reg, const uint8_t val, bool verbose) {
   return true;
 }
 
-void writeToMicom()
+void writeToMicomStatic()
 {
   I2C_micom.write(205);
   return;
-    //Serial.println("\nI/O to TV MICOM!");
-    // sleep to increase likelihood of r[] having data?
-    // I2C_micom.write(r, 2);
-    // should we just writeback a pre-recorded OK instead?
-    // https://github.com/coredump/27v66_i2c_intercept_promicro/blob/main/src/main.cpp#L88
+  // this basically tells control chip that the H/V output is still
+  // working with normal current draw.
+  // this is a safety feature (auto CRT shutoff) we're subverting,
+  // so don't leave the TV on unattended, OK?
 /*
-KILLERB 1 00H D7 Killer off for manual mode.
-AFT0 1 00H D3 AFT output
-AFT1 1 00H D2 AFT output
-HCOINB 1 00H D1 Horizontal mute det output. 0: H coincident
-FM STDETB 1 01H D4 Station det for FM Radio mode. 0: Station det.
-VCOINB 1 01H D3 Vertical Sync det output. 0:V coincident
-STDETB 1 01H D2 Station det for TV mode. 0: Station det.
-
 D0 unassigned
 HCOINB D1 Horizontal mute det output. 0: H coincident
 AFT1 D2 AFT output
@@ -87,13 +80,13 @@ KILLERB D7 Killer off for manual mode.
   } else {
     I2C_micom.write(205);
   }
-    //Serial.println("\nheartbeat from MITMd NTSC to TV MICOM!");
-    // this basically tells control chip that the H/V output is still
-    // working with normal current draw.
-    // this is a safety feature (auto CRT shutoff) we're subverting to
-    // make our code simpler, so don't leave the TV on unattended, OK?
-// note master will interrupt any write() of ours after it thinks
-// its gotten enough data
+}
+
+void writeToMicom()
+{
+    I2C_micom.write(r, 2);
+  // NOTE: master will interrupt any write() of ours after it thinks
+  // its gotten enough data
 }
 
 void readFromMicom(int byteCount)
@@ -121,6 +114,7 @@ void readFromMicom(int byteCount)
       //  bitSet(val, 7); // Force White BG 1=>ON 0=>
       //case 0x13:
       //case 0x2:
+      //  bitClear(val, 7); // don't allow video to be muted
       //  delay(50);
         break;
       case 0x06: // is continously set on interval by Orion TV!
@@ -167,25 +161,17 @@ void readFromJungle(int byteCount)
 void setup()
 {
   Serial.begin(115200);
-  if (!I2C_jungl.begin(SDA_1, SCL_1, I2C_FREQ)) {
-    Serial.print("error connecting with jungle");
+  I2C_jungl.onReceive(readFromJungle);
+  while (!I2C_jungl.begin(SDA_1, SCL_1, I2C_FREQ)) {
+    Serial.print("error initializing I2C for jungle, will retry");
+    delay(300);
   }
   I2C_micom.onReceive(readFromMicom); // master is writing to us
   I2C_micom.onRequest(writeToMicom); // master is reading from us
-  if (!I2C_micom.begin(MITSU_I2C_ADDRESS, SDA_2, SCL_2, I2C_FREQ)) {
-    Serial.println("error connecting with micom");
+  while (!I2C_micom.begin(MITSU_I2C_ADDRESS, SDA_2, SCL_2, I2C_FREQ)) {
+    Serial.println("error initializing I2C for micom, will retry");
+    delay(300);
   }
-  Serial.println("\nMitsu NTSC MITM");
-
-  /*
-  I2C_jungl.beginTransmission((uint8_t) MITSU_I2C_ADDRESS);
-  if (0 == I2C_jungl.endTransmission()) {
-    Serial.println("Mitsu NTSC jungle chip found!");
-  } else {
-    Serial.println("no jungle chip found!");
-  }
-  */
-  //I2C_jungl.onReceive(readFromJungle);
 }
 
 void loop()
