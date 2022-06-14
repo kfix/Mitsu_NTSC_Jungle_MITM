@@ -106,84 +106,102 @@ void readFromMicom(int byteCount)
     switch (reg)
     {
       case REG_OSD_RGB_MODE: // is continously set on interval by Orion TV!
-        // ensure "Analog OSD" is left pulled-up (the 5th bit from right)
-        bitSet(val, 4); // Analog OSD 1=>ON 0=>OFF
-        // bitSet(val, 3); // Force Monochrome 1=>ON 0=>OFF
-        // bitSet(val, 2); // Force Color 1=>ON 0=>OFF
         // bit7 // AFC2 H Phase (MSB bit)
+        // bit6 // Not Assigned
         // bit5 // Fsc free | Free-running mode of crystal oscillator | 0: OFF | 1: Free-running
+        // bit4 // Analog OSD 1=>ON 0=>OFF
+        // bit3 // Force Monochrome 1=>ON 0=>OFF
+        // bit2 // Force Color 1=>ON 0=>OFF
         // bit0 // Color Killer Sensitivity Threshold Switch | 0: 43dB | 1: 45dB
+
+        bitSet(val, 4);  // ensure "Analog OSD"
         frobbled = true;
-      case 0x2: // is continously set on interval by Orion TV to 0x80
+        break;
+      case 0x2: // is continously set on interval by Orion TV to 0x80 => '0b10000000'
         //  bit7 // Luminance signal Mute ON/OFF switch | 0: Out | 1: Mute
         //  bit6 // AF Direct out/External Audio input signal switch | 0: AF amp out | 1: External
-        //  bit5 // Forced Spot Killer under Power on condition | 1: OFF | 0: Forced S.Killer
-        //  bit4 // Chroma Trap ON/OFF switch | 0:Chroma Trap ON | 1: Chroma Trap Off
+        //  bit5 // Forced Spot Killer under Power on condition | 0: Forced S.Killer | 1: Off
+        //  bit4 // Y-signal Chroma Trap ON/OFF switch | 0: Chroma Trap ON | 1: Chroma Trap Off
         //  bit3 // Video Tone Gain (Hi/Normal) switch | 0: normal | 1: high(sharp)
         //  bit2 // ABCL | 0 => OFF (ACL) | 1 => ON
-        //  bit0 // Chroma BPF/Take Off Switch | 0 :BPF | 1: Take Off
+        //  bit1 // Luminance Signal Delay time Fine pitch Adjustment
+        //  bit0 // Chroma BPF/Take-Off Function Switch | 0: BPF | 1: Take-Off
         if (rgb_switched) {
           // if sync line is Comp-video, we'd get "double-exposed" over saturation unless we mute
-          //bitSet(val, 7);
+          // bitSet(val, 7);
         } else {
           //bitClear(val, 7);
         }
         //verbose = true;
         break;
-      case 0x06: // is continously set on interval by Orion TV! to 0xa0
-        // bit2 // AV Switch Selector |  V-Latch | 0: TV mode | 1: EXT mode
-        // bit3 // Black Stretch function ON/OFF switch | 0: ON | 1: OFF
+      case 0x06: // is continously set on interval by Orion TV to 0xa0 => '0b10100000'
+        // bit5:7 // VIF Video Out Gain
         // bit4 // AV Switch Selector |  V-Latch | 0: Composite video input | 1: Y/C input mode
+        // bit3 // Black Stretch function ON/OFF switch | 0: ON | 1: OFF
+        // bit2 // AV Switch Selector |  V-Latch | 0: TV mode | 1: EXT mode
+        // bit0:1 // Luminance Signal Delay time Adjustment
         if (rgb_switched) {
           //bitSet(val, 4);
           //bitSet(val, 2);
         } else {
-          bitClear(val, 4); // 1 would show luminance as a monochrome picturel!;
+          bitClear(val, 4); // 1 shows CVBS' luminance as a monochrome picture
         }
-        /*
-            seems to make chip ignore Video AND Sync on the Y-in pin,
-            guessing that EXT/C pin becomes the active input...
-            TODO:
-              * install a sync-stripper off comp-vid input and route it to EXT/C
-              * tie a GPIO into my blanking-switch (RGB OFF/ON)
-              * if rgb-switch is HIGH, then set this bit to use the stripped-sync as input
-        */
         verbose = true;
         break;
-      // -- we can check the rest in sorted order, not as frequently sent or important at startup --
-      case 0x3: // continous 0x0
-      // bit7  // AF Direct out ON/OFF(Mute) switch | 0: Sound ON (Non Mute) | 1: Mute
-        break;
-      case 0x4: // set continuously to 0xa8 => 0b10101000
-        // bit2 // ABCL Gain | 0 => Lo | 1 => Hi
+      //case 0x0:
+        // bit7 // Inter Carrier/Split Carrier Switch 0: Inter Carrier, 1: Split Carrier
+        // bit0:6 //RF AGC Delay Point Adjustment by 7bit DAC
+      //case 0x1:
+        // bit7 N/A
+        // bit6 VIF Frequency Selector 0: 45.75MHz, 1: 58.75MHz
+        // bit0:5 // VIF VCO Free-running Frequency Adjustment by 5bit DAC
+      //case 0x3: // continous 0x0
+        // bit7  // AF Direct out ON/OFF(Mute) switch | 0: Sound ON (Non Mute) | 1: Mute
+        // bit0:5 // Audio Out Level Attenuation by 7bit DAC MAX gain=0dB
+      //case 0x4: // set continuously to 0xa8 => 0b10101000
+        // bit7 // ABCL Gain | 0 => Lo | 1 => Hi
         // bit6 // AFT OUT ON/OFF(Defeat) switch | 0: AFT ON (Non Defeat) | 1: Defeat
-        break;
+        // bit0:5 // Video Tone - Delay line type Aperture Control
+      // case 0x5:
+        // bit7 // Contrast Control Clip Switch when OSD mode | 0: Clip ON | 1: Clip OFF
+        // bit0:6 //Contrast Control by 7bit DAC
       //case 0x7:
-        // bit1 // VIF AGC Gain Normal/Minimum switch |  0: AGC Function |1: Defeat(Minimum Gain)
+        // bit7 // VIF AGC Gain Normal/Minimum switch |  0: AGC Function | 1: Defeat(Minimum Gain)
+        // bit0:6 // Tint Control by 7bit DAC
       //case 0x08:
-        // bitSet(val, 7); // Blue Back mode switch | 1=>ON | 0=>OFF
-        //  obscures Y-CVBS too
-      case 0x9: // continuous 0x59 => 0b01011001
-        // bit1 // Horizontal AFC2 Gain switch | 0: High | 1: Low
-        break;
+        // bit7 // Blue Back mode switch | 1=>ON | 0=>OFF
+        // bit0:6 // Color Saturation Control by 7bit DAC
+      //case 0x9: // continuous 0x59 => 0b01011001
+        // bit4:7 // AFC2 H Phase
+        // bit1:3 // Not Assigned
+        // bit0 // Horizontal AFC2 Gain switch | 0: High | 1: Low
+      //case 0x0a:
+        // bit0:7 // Brightness Control by 8bit DAC
       //case 0x0b:
-      // bit7 // Vertical Forced free-running mode switch | 0: OFF | 1: Forced Free-running
-      case 0x10: // continous 0x14
-        //  bitSet(val, 7); // White Raster Mode Switch | 1=>ON 0=>OFF
-        //  bit6 // Sync Det Slice Level (50%/40%) | 0: 50% | 1: 40%
-        //  bit3-5 // H VCO free-running frequency Adjustment | 0%-100%
-        break;
+        // bit7 // Vertical Forced free-running mode switch | 0: OFF | 1: Forced Free-running
+        // bit0:6 // R OUT Amplitude Adjustment by 7bit DAC
+      //case 0x10: // continous 0x14
+        // bit7 // White Raster Mode Switch | 1=>ON 0=>OFF
+        // bit6 // Sync Det Slice Level (50%/40%) | 0: 50% | 1: 40%
+        // bit3-5 // H VCO free-running frequency Adjustment | 0%-100%
+      //case 0x11:
+        // bit0-5 // V-Size V RAMP Amplitude Adjustment by 6bit DAC.
       //case 0x12:
-        //  bit4-7 // Intelligent Monitor mode selector
-      case 0x13: //continuous 0x12
-        // bit5 // Horizontal AFC Gain switch | 0: Low | 1: High
-        // bit6 // Vertical Sync. Det mode (1 Window/2 Window) | 0: 2 Window/Vsyncdet=9μs | 1: 1Window/Vsyncdet=11μs
+        // bit4-7 // Intelligent Monitor mode selector
+        // bit2-3 // Luminance Gamma Threshold Control 0:Gamma OFF
+      //case 0x13: //continuous 0x12 => '0b00010010'
         // bit7 // Horizontal Forced free-running mode switch | 0: OFF |1: Forced Free-running
-        break;
-      case 0x14: // continuouts 0x74
+        // bit6 // Vertical Sync. Det mode (1 Window/2 Window) | 0: 2 Window/Vsyncdet=9μs | 1: 1Window/Vsyncdet=11μs
+        // bit5 // Horizontal AFC Gain switch | 0: Low | 1: High
+        // bit4 // H-Start
+        // bit3 // Service SW
+        // bit0:2 // V-Shift V RAMP Sart timing Adjustment 2Line/Step
+      //case 0x14: // continuous 0x74 => 0b01110100
         // bit7 // Pin6 FBP slice level switch | 0:Vth=2V(narrow) | 1:Vth=1V(wide)
+        // bit6 // Y SW OUT frequency switch | 0: FLAT | 1: LPF(fc=700KHz)
+        // bit4:5 // Charge Time Constant Adjustment for Black Stretch
         // bit3 // Sync Det Slice Level (50%/30%)|  0: 50% | 1: 30%
-        break;
+        // bit0:2 // FM Station Level
       default:
         // passthru
         break;
@@ -213,11 +231,27 @@ void readFromJungle(int byteCount)
   }
 }
 
+void poll_rgb_switch() {
+  // FIXME: need to debounce this
+  int blanking_level = analogRead(RGB_SWITCH);
+  if (!rgb_switched && blanking_level > 2000) {
+    rgb_switched = true;
+    Serial.print("\t\tRGB switched ON -- level ");
+    Serial.println(blanking_level);
+  } else if (rgb_switched && blanking_level < 2000) {
+    rgb_switched = false;
+    Serial.print("\t\tRGB switched OFF -- level ");
+    Serial.println(blanking_level);
+  }
+}
+
 // the setup routine runs once when you press reset,
 // also when TV is plugged into AC power
 void setup()
 {
   Serial.begin(115200);
+  pinMode(RGB_SWITCH, INPUT);
+  poll_rgb_switch();
   I2C_jungl.onReceive(readFromJungle);
   I2C_micom.onReceive(readFromMicom); // master is writing to us
   I2C_micom.onRequest(writeToMicom); // master is reading from us
@@ -232,22 +266,12 @@ void setup()
   while (!I2C_micom.begin(MITSU_I2C_ADDRESS, SDA_2, SCL_2, I2C_FREQ)) {
     delay(50);
   }
-  pinMode(RGB_SWITCH, INPUT);
   Serial.println("\n [ OK ]\n setup() complete");
   interrupts();
 }
 
 void loop()
 {
-  int blanking_level = analogRead(RGB_SWITCH);
-  if (!rgb_switched && blanking_level > 2000) {
-    rgb_switched = true;
-    Serial.print("\t\tRGB switched ON -- level ");
-    Serial.println(blanking_level);
-  } else if (rgb_switched && blanking_level < 2000) {
-    rgb_switched = false;
-    Serial.print("\t\tRGB switched OFF -- level ");
-    Serial.println(blanking_level);
-  }
+  poll_rgb_switch();
   delay(50);
 }
