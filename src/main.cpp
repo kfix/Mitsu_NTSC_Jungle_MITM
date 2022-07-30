@@ -173,7 +173,7 @@ void readFromMicom(int byteCount)
         // bit0:5 // Audio Out Level Attenuation by 7bit DAC MAX gain=0dB
       //case 0x4: // set continuously to 0xa8 => 0b10101000
         // bit7 // ABCL Gain | 0 => Lo | 1 => Hi
-        // bit6 // AFT OUT ON/OFF(Defeat) switch | 0: AFT ON (Non Defeat) | 1: Defeat
+        // bit6 // Automatic Fine Tuning OUT ON/OFF(Defeat) switch | 0: AFT ON (Non Defeat) | 1: Defeat
         // bit0:5 // Video Tone - Delay line type Aperture Control
       // case 0x5:
         // bit7 // Contrast Control Clip Switch when OSD mode | 0: Clip ON | 1: Clip OFF
@@ -193,11 +193,13 @@ void readFromMicom(int byteCount)
       //case 0x0b:
         // bit7 // Vertical Forced free-running mode switch | 0: OFF | 1: Forced Free-running
         // bit0:6 // R OUT Amplitude Adjustment by 7bit DAC
-      //case 0x10: // continously written - HVCO varies with calibration -'0b00XXX100'
+      case 0x10: // continously written - HVCO varies with calibration -'0b00XXX100'
         // bit7 // White Raster Mode Switch | 1=>ON 0=>OFF
         // bit6 // Sync Det Slice Level (50%/40%) | 0: 50% | 1: 40%
+        bitSet(val, 6);
         // bit3-5 // H VCO free-running frequency Adjustment | 0%-100% | (Orion Service Menu #04)
         // bit0:2 // Not Assigned
+        break;
       //case 0x11:
         // bit0-5 // V-Size V RAMP Amplitude Adjustment by 6bit DAC.
       //case 0x12: // continously 0xb0 => 0b10110000
@@ -218,7 +220,7 @@ void readFromMicom(int byteCount)
         // AFC-Gain doesn't appear to be needed for RGBS input to work...& maybe it adds lag?
         // but CVBS really seems to need it (picture smears at the top without)
         // so lets just force it on always to keep the geometry consistent across both modes
-        bitClear(val, 5);
+        bitSet(val, 5);
 
         if (rgb_switched) {
           // lets keep V-deflection always on too...
